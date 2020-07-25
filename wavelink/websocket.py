@@ -112,7 +112,7 @@ class WebSocket:
 
                 await asyncio.sleep(retry)
                 if not self.is_connected:
-                    self.bot.loop.create_task(self._connect())
+                    await self._connect()
             else:
                 __log__.debug(f'WEBSOCKET | Received Payload:: <{msg.data}>')
                 self.bot.loop.create_task(self.process_data(msg.json()))
