@@ -23,6 +23,7 @@ SOFTWARE.
 import logging
 import time
 import re
+import asyncio
 from discord.ext import commands
 from discord.gateway import DiscordWebSocket
 from typing import Optional, Union
@@ -30,6 +31,7 @@ from typing import Optional, Union
 from .errors import *
 from .eqs import *
 from .events import *
+from .backoff import ExponentialBackoff
 
 
 __all__ = ('Track', 'TrackPlaylist', 'Player')
@@ -156,6 +158,7 @@ class Player:
         self.paused = False
         self.current = None
         self._equalizer = Equalizer.flat()
+        self._back = None
         self.channel_id = None
 
     @property
@@ -227,6 +230,9 @@ class Player:
             self._voice_state.clear()
             return
 
+        if self._back:
+            self._back = None
+
         self.channel_id = int(channel_id)
         await self._dispatch_voice_update()
 
@@ -238,6 +244,23 @@ class Player:
     async def hook(self, event) -> None:
         if isinstance(event, (TrackEnd, TrackException, TrackStuck)):
             self.current = None
+
+        if isinstance(event, WebsocketClosed):
+            if event.code in (4015,4009,4006):
+                reconnect_id = self.channel_id
+                self.channel_id = None
+
+                if not self._back:
+                    self._back = ExponentialBackoff(base=1)
+
+                delay = self._back.delay()
+                __log__.debug(f'PLAYER | Reconnecting to channel : {reconnect_id} in {delay}')
+                await asyncio.sleep(delay)
+
+                if not self.channel_id:
+                    await self.connect(reconnect_id)
+            else:
+                self.channel_id = None
 
     def _get_shard_socket(self, shard_id: int) -> Optional[DiscordWebSocket]:
         if isinstance(self.bot, commands.AutoShardedBot):
