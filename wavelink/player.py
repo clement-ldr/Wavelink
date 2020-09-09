@@ -242,7 +242,7 @@ class Player:
             await self.node._send(op='voiceUpdate', guildId=str(self.guild_id), **self._voice_state)
 
     async def hook(self, event) -> None:
-        if isinstance(event, (TrackEnd, TrackException, TrackStuck)):
+        if isinstance(event, TrackEnd):
             self.current = None
 
         if isinstance(event, WebsocketClosed):
